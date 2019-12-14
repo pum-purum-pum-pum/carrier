@@ -1,0 +1,18 @@
+[package]
+name = "carrier"
+version = "0.1.0"
+authors = ["Vlad Zhukov (Влад Жуков)"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = {version="0.2.0", features=["full"]}
+tokio-util = {version="0.2.0", features=["full"]} # "codec"
+futures = "0.3"
+futures-util = "0.3"
+rayon = "1.2.1"
+env_logger = "0.7.1"
+log = { version = "0.4.8", features=["serde"] }
+failure = "0.1.6"
+chat-app = {path="../technical-challenge-master"}
