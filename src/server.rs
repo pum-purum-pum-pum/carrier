@@ -45,6 +45,20 @@ pub struct ChatState {
 }
 
 impl ChatState {
+    pub async fn new_peer(&mut self, stream: TcpStream) -> Result<Peer, Error> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let mut lines = Framed::new(stream, LinesCodec::new());
+        let id = if let Some(Ok(line)) = lines.next().await {
+            u32::from_str_radix(&line, 10)?
+        } else {
+            bail!("Client have not send it's id");
+        };
+        info!("peer {:?}", id);
+        self.peers.insert(id, tx);
+        self.users.insert(id, User::default());
+        Ok(Peer { lines, rx })
+    }
+
     pub fn contains(&self, user: u32) -> bool {
         self.peers.contains_key(&user)
     }
@@ -71,10 +85,10 @@ impl ChatState {
         self.users.get_mut(&user).map(|u| &mut u.blocked)
     }
 
-    pub fn new_peer(&mut self, id: u32, tx: Tx) {
-        self.peers.insert(id, tx);
-        self.users.insert(id, User::default());
-    }
+    // pub fn new_peer(&mut self, id: u32, tx: Tx) {
+    //     self.peers.insert(id, tx);
+    //     self.users.insert(id, User::default());
+    // }
 
     /// Actor should now be following Target. Target is expected to receive this event.
     pub fn follow(&mut self, from: u32, to: u32, message: &str) -> Result<(), Error> {
@@ -83,7 +97,6 @@ impl ChatState {
                 user.followers.insert(from);
                 let target_peer = self.peers.get(&to).unwrap();
                 target_peer.send(message.into())?;
-                info!("follow message send {:?}", &message);
             }
         };
         Ok(())

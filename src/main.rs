@@ -31,27 +31,37 @@ async fn main() -> Result<(), Error> {
         match event_source_listener.accept().await {
             Ok((stream, _addr)) => {
                 if let Err(error) = process_event_source(state, queue, stream).await {
-                    log::error!("Error during processing event source {}", error);
+                    log::error!("Error during processing event source: {}", error);
                 }
             }
             Err(error) => {
-                log::error!("Failed to accept event source connection {}", error);
+                log::error!("Failed to accept event source connection: {}", error);
             }
         }
     });
-    let state = Arc::clone(&shared_state);
-    let queue = Arc::clone(&sequenced_queue);
     loop {
-        let state = Arc::clone(&state);
-        let queue = Arc::clone(&queue);
-        if let Ok((stream, _addr)) = clients_listner.accept().await {
-            tokio::spawn(async move {
-                if let Err(error) =
-                    process_client(state, queue, stream, CLIENT_RECEIVER_TIMEOUT).await
-                {
-                    log::error!("Error during processing client {}", error)
-                }
-            });
+        let state = Arc::clone(&shared_state);
+        let queue = Arc::clone(&sequenced_queue);
+        match clients_listner.accept().await {
+            Ok((stream, _addr)) => {
+                tokio::spawn(async move {
+                    let peer = state.lock().await.new_peer(stream).await;
+                    match peer {
+                        Ok(peer) => {
+                            if let Err(error) = process_client(queue, peer, CLIENT_RECEIVER_TIMEOUT).await
+                            {
+                                log::error!("Error during processing client: {}", error)
+                            }
+                        },
+                        Err(error) => {
+                            log::error!("Failed to connect client: {}", error);
+                        }
+                    }
+                });
+            }
+            Err(error) => {
+                log::error!("Failed to accept client connection: {}", error);
+            }
         }
     }
 }

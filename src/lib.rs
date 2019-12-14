@@ -110,12 +110,10 @@ enum GracefulMessage {
 
 /// Perform retranslating messages from queue and check timeout afterwards
 pub async fn process_client(
-    state: State,
     queue: Queue,
-    stream: TcpStream,
+    mut peer: Peer,
     timeout_millis: u64,
 ) -> Result<(), Error> {
-    let mut peer = Peer::new(state, stream).await?;
     loop {
         let mut queue = Box::pin(queue.lock().fuse());
         let mut msg = peer.rx.next().fuse();
@@ -133,7 +131,6 @@ pub async fn process_client(
                     // make sure there is no other messages in receiver before closing socket
                     match timeout(Duration::from_millis(timeout_millis), peer.rx.next()).await {
                         Err(_) => {
-                            log::info!("done");
                             break;
                         }
                         Ok(Some(msg)) => {

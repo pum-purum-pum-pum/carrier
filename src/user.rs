@@ -9,6 +9,6 @@ pub struct User {
 
 impl User {
     pub fn is_not_blocked(&self, id: u32) -> bool {
-        self.blocked.contains(&id)
+        !self.blocked.contains(&id)
     }
 }
