@@ -12,7 +12,6 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time::{timeout, Duration};
 use tokio_util::codec::{Framed, LinesCodec};
-use tokio::time::delay_for;
 
 use futures::future::FutureExt;
 use futures::{select, StreamExt};
@@ -80,7 +79,6 @@ pub async fn process_event_source(
 pub async fn process_queue(sequenced_queue: Queue, state: State) -> Result<(), Error> {
     let mut sequenced_queue = sequenced_queue.lock().await;
     while let Some((item, msg)) = sequenced_queue.next() {
-        delay_for(Duration::from_nanos(100)).await;
         match item {
             Event::Follow { from, to } => {
                 state.lock().await.follow(from, to, &msg)?;
