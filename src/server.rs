@@ -55,8 +55,14 @@ impl ChatState {
         };
         info!("peer {:?}", id);
         self.peers.insert(id, tx);
-        self.users.insert(id, User::default());
+        // self.users.insert(id, User::default());
         Ok(Peer { lines, rx })
+    }
+
+    pub fn generate_users(&mut self, users_num: u32) {
+        for i in 1..=users_num {
+            self.users.insert(i, User::default());
+        }
     }
 
     pub fn contains(&self, user: u32) -> bool {
@@ -95,8 +101,10 @@ impl ChatState {
         if let Some(user) = self.users.get_mut(&to) {
             if user.is_not_blocked(from) {
                 user.followers.insert(from);
-                let target_peer = self.peers.get(&to).unwrap();
-                target_peer.send(message.into())?;
+                if let Some(target_peer) = self.peers.get(&to) {
+                    target_peer.send(message.into())?;
+                    log::info!("follow {}", message);
+                }
             }
         };
         Ok(())
@@ -133,8 +141,10 @@ impl ChatState {
     ) -> Result<(), Error> {
         if let Some(user) = self.users.get(&to) {
             if user.is_not_blocked(from) {
-                let target_peer = self.peers.get(&to).unwrap();
-                target_peer.send(message.into())?;
+                if let Some(target_peer) = self.peers.get(&to) {
+                    log::info!("private {}", message);
+                    target_peer.send(message.into())?;
+                }
             }
         }
         Ok(())

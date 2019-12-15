@@ -12,6 +12,7 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time::{timeout, Duration};
 use tokio_util::codec::{Framed, LinesCodec};
+use tokio::time::delay_for;
 
 use futures::future::FutureExt;
 use futures::{select, StreamExt};
@@ -45,11 +46,12 @@ pub async fn process_event_source(
     {
         // do work with socket here
         let mut lines = Framed::new(stream, LinesCodec::new());
-        let _user_num: u32 = if let Some(Ok(line)) = lines.next().await {
+        let user_num: u32 = if let Some(Ok(line)) = lines.next().await {
             u32::from_str_radix(&line, 10)?
         } else {
             bail!("failed to parse number of users in event source message");
         };
+        state.lock().await.generate_users(user_num);
         while let Some(Ok(line)) = lines.next().await {
             let event = Event::parse(&line)?;
             let sq = Arc::clone(&sequenced_queue);
@@ -78,6 +80,7 @@ pub async fn process_event_source(
 pub async fn process_queue(sequenced_queue: Queue, state: State) -> Result<(), Error> {
     let mut sequenced_queue = sequenced_queue.lock().await;
     while let Some((item, msg)) = sequenced_queue.next() {
+        delay_for(Duration::from_nanos(100)).await;
         match item {
             Event::Follow { from, to } => {
                 state.lock().await.follow(from, to, &msg)?;

@@ -25,6 +25,10 @@
 
 * timeout by 8-sized batches
 
+* assumption that solution is slower then test locally is not correct
+* unclear task about "silentry ignored"
+* mistake in `handle user updates` counter = 0 should be counter = 1 (no events have 0 id)
+* why unfollow "expect"
 * unfollow is wrong?????
     /// Target should be removed from Actor's followers. No one is expected to receive this event.
     pub fn unfollow(&mut self, from: u32, to: u32) {
