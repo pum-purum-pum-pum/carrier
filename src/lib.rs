@@ -27,9 +27,9 @@ use chat_app::event::Event;
 pub mod misc;
 /// Core server logic
 pub mod server;
-pub mod user;
 #[cfg(test)]
 mod tests;
+pub mod user;
 
 /// Shared chat state
 pub type State = Arc<Mutex<ChatState>>;
@@ -128,7 +128,7 @@ pub async fn process_client(
             }
             msg = msg => {
                 if let Some(msg) = msg {
-                    peer.lines.send(msg).await?;            
+                    peer.lines.send(msg).await?;
                 } else {
                     break
                 }

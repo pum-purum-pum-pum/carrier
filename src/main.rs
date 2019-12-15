@@ -49,11 +49,12 @@ async fn main() -> Result<(), Error> {
                     let peer = state.lock().await.new_peer(stream).await;
                     match peer {
                         Ok(peer) => {
-                            if let Err(error) = process_client(queue, peer, CLIENT_RECEIVER_TIMEOUT).await
+                            if let Err(error) =
+                                process_client(queue, peer, CLIENT_RECEIVER_TIMEOUT).await
                             {
                                 log::error!("Error during processing client: {}", error)
                             }
-                        },
+                        }
                         Err(error) => {
                             log::error!("Failed to connect client: {}", error);
                         }
