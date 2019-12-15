@@ -7,8 +7,8 @@ use failure::Error;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 
-use carrier::misc::SequencedQueue;
-use carrier::server::ChatState;
+use carrier::sequenced_queue::SequencedQueue;
+use carrier::server::ServerState;
 use carrier::{process_client, process_event_source};
 
 const TOTAL_EVENTS: u32 = 1_000_0;
@@ -18,15 +18,15 @@ const CLIENT_RECEIVER_TIMEOUT: u64 = 1;
 async fn main() -> Result<(), Error> {
     env_logger::builder().filter_level(LevelFilter::Info).init();
     // information about users
-    let shared_state = Arc::new(Mutex::new(ChatState::default()));
+    let shared_state = Arc::new(Mutex::new(ServerState::default()));
     // sequenced messages from event source
-    let sequenced_queue = Arc::new(Mutex::new(SequencedQueue::new(TOTAL_EVENTS)));
+    let incomming_events = Arc::new(Mutex::new(SequencedQueue::new(TOTAL_EVENTS)));
     let mut event_source_listener = TcpListener::bind("127.0.0.1:9999").await?;
     let mut clients_listner = TcpListener::bind("127.0.0.1:9990").await?;
     // we spawn event source listener in order to pass chat-app test
     // while it seems to be more correct to wait until it's connected
     let state = Arc::clone(&shared_state);
-    let queue = Arc::clone(&sequenced_queue);
+    let queue = Arc::clone(&incomming_events);
     tokio::spawn(async move {
         match event_source_listener.accept().await {
             Ok((stream, _addr)) => {
@@ -39,10 +39,10 @@ async fn main() -> Result<(), Error> {
             }
         }
     });
+    // connect new clients
     loop {
         let state = Arc::clone(&shared_state);
-        let queue = Arc::clone(&sequenced_queue);
-        // log::info!("waiting clients");
+        let queue = Arc::clone(&incomming_events);
         match clients_listner.accept().await {
             Ok((stream, _addr)) => {
                 tokio::spawn(async move {

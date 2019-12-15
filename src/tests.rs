@@ -12,8 +12,8 @@ use tokio_util::codec::{Framed, LinesCodec};
 
 use futures::StreamExt;
 
-use crate::misc::SequencedQueue;
-use crate::server::{ChatState, Peer, Rx, Tx};
+use crate::sequenced_queue::SequencedQueue;
+use crate::server::{ServerState, Peer, Rx, Tx};
 use crate::{process_client, process_event_source, Queue, State};
 
 const TEST_ADDRESS: &str = "127.0.0.1:9938";
@@ -51,7 +51,7 @@ async fn generate_clients(
 async fn follow() {
     let users_num = 2;
     let mut clients_listner = TcpListener::bind(TEST_ADDRESS).await.unwrap();
-    let chat_state = Arc::new(Mutex::new(ChatState::default()));
+    let chat_state = Arc::new(Mutex::new(ServerState::default()));
     chat_state.lock().await.generate_users(users_num);
     let test_adress = TEST_ADDRESS.clone();
     tokio::spawn(async move {
@@ -91,9 +91,9 @@ fn test_queue() {
 async fn client() {
     let users_num = 2;
     let queue_size = 0; // queue is empty
-    let chat_state = Arc::new(Mutex::new(ChatState::default()));
+    let chat_state = Arc::new(Mutex::new(ServerState::default()));
     chat_state.lock().await.generate_users(users_num);
-    let sequenced_queue: Queue = Arc::new(Mutex::new(SequencedQueue::new(queue_size)));
+    let incomming_events: Queue = Arc::new(Mutex::new(SequencedQueue::new(queue_size)));
 
     // create fake users and conncet to loca peers i.e."clients"
     let mut clients_listner = TcpListener::bind(TEST_ADDRESS4).await.unwrap();
@@ -103,7 +103,7 @@ async fn client() {
 
     tokio::spawn(async move {
         for peer in clients.drain(..) {
-            let queue = Arc::clone(&sequenced_queue);
+            let queue = Arc::clone(&incomming_events);
             process_client(queue, peer, 1).await.unwrap();
         }
     });
@@ -123,9 +123,9 @@ async fn client() {
 async fn event_source() {
     let queue_size = 1;
     let users_num = 2;
-    let chat_state = Arc::new(Mutex::new(ChatState::default()));
+    let chat_state = Arc::new(Mutex::new(ServerState::default()));
     chat_state.lock().await.generate_users(users_num);
-    let sequenced_queue: Queue = Arc::new(Mutex::new(SequencedQueue::new(queue_size)));
+    let incomming_events: Queue = Arc::new(Mutex::new(SequencedQueue::new(queue_size)));
 
     // first we need generate clients
     let mut clients_listner = TcpListener::bind(TEST_ADDRESS3).await.unwrap();
@@ -147,7 +147,7 @@ async fn event_source() {
             .unwrap();
     });
     let (stream, _addr) = event_source_listener.accept().await.unwrap();
-    process_event_source(Arc::clone(&chat_state), sequenced_queue, stream)
+    process_event_source(Arc::clone(&chat_state), incomming_events, stream)
         .await
         .unwrap();
 

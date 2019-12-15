@@ -37,14 +37,15 @@ impl Peer {
     }
 }
 
-/// Struct which contains information about connected users and allows to execute events on them
+/// Users state and connections
 #[derive(Debug, Default)]
-pub struct ChatState {
+pub struct ServerState {
     pub peers: HashMap<u32, Tx>,
     pub users: HashMap<u32, User>,
 }
 
-impl ChatState {
+impl ServerState {
+    /// create new peer
     pub async fn new_peer(&mut self, stream: TcpStream) -> Result<Peer, Error> {
         let (tx, rx) = mpsc::unbounded_channel();
         let mut lines = Framed::new(stream, LinesCodec::new());
@@ -55,7 +56,6 @@ impl ChatState {
         };
         info!("peer {:?}", id);
         self.peers.insert(id, tx);
-        // self.users.insert(id, User::default());
         Ok(Peer { lines, rx })
     }
 

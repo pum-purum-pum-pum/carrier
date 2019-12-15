@@ -1,7 +1,5 @@
 /*!
-System which acts as a socket listener that
-reads events from an _event source_ and forwards them to the relevant _user
-clients_.
+System which acts as a socket listener that reads events from an _event source_ and forwards them to the relevant _user clients_.
 */
 
 use std::sync::Arc;
@@ -17,29 +15,29 @@ use futures::future::FutureExt;
 use futures::{select, StreamExt};
 use futures_util::sink::SinkExt;
 
-use misc::SequencedQueue;
-use server::{ChatState, Peer};
+use sequenced_queue::SequencedQueue;
+use server::{ServerState, Peer};
 
 // TODO dependecnies update.
 use chat_app::event::Event;
 
-/// General functions and data structures
-pub mod misc;
-/// Core server logic
+/// A queue with a guarantee of the return of sequential elements.
+pub mod sequenced_queue;
+/// Users and functions to execute events on them
 pub mod server;
 #[cfg(test)]
 mod tests;
 pub mod user;
 
 /// Shared chat state
-pub type State = Arc<Mutex<ChatState>>;
+pub type State = Arc<Mutex<ServerState>>;
 /// Shared sequenced queue with messages(events) from _event source_
 pub type Queue = Arc<Mutex<SequencedQueue<(Event, String)>>>;
 
 /// Send messages from event source into queue and asynchronously process them
 pub async fn process_event_source(
     state: State,
-    sequenced_queue: Queue,
+    incomming_events: Queue,
     stream: TcpStream,
 ) -> Result<(), Error> {
     {
@@ -53,32 +51,32 @@ pub async fn process_event_source(
         state.lock().await.generate_users(user_num);
         while let Some(Ok(line)) = lines.next().await {
             let event = Event::parse(&line)?;
-            let sq = Arc::clone(&sequenced_queue);
+            let sq = Arc::clone(&incomming_events);
             tokio::spawn(async move {
                 sq.lock().await.insert(event.0, (event.1, line.clone()));
             });
             // processing events asap
-            let sq = Arc::clone(&sequenced_queue);
+            let sq = Arc::clone(&incomming_events);
             let state = Arc::clone(&state);
             tokio::spawn(async move {
-                if let Err(error) = process_queue(sq, state).await {
+                if let Err(error) = process_and_forward(sq, state).await {
                     log::error!("Error during processing events queue {}", error);
                 }
             });
         }
     }
-    // drain queue
-    while !sequenced_queue.lock().await.finished() {
-        process_queue(Arc::clone(&sequenced_queue), Arc::clone(&state)).await?;
+    // drain events from queue
+    while !incomming_events.lock().await.finished() {
+        process_and_forward(Arc::clone(&incomming_events), Arc::clone(&state)).await?;
     }
     Ok(())
 }
 
-/// Check new messages in queue and process them.
+/// Check new messages in queue then process and forward them to connected clients.
 /// Queue is locked until we drain all events from it
-pub async fn process_queue(sequenced_queue: Queue, state: State) -> Result<(), Error> {
-    let mut sequenced_queue = sequenced_queue.lock().await;
-    while let Some((item, msg)) = sequenced_queue.next() {
+pub async fn process_and_forward(incomming_events: Queue, state: State) -> Result<(), Error> {
+    let mut incomming_events = incomming_events.lock().await;
+    while let Some((item, msg)) = incomming_events.next() {
         match item {
             Event::Follow { from, to } => {
                 state.lock().await.follow(from, to, &msg)?;
