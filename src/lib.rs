@@ -102,13 +102,6 @@ pub async fn process_queue(sequenced_queue: Queue, state: State) -> Result<(), E
     Ok(())
 }
 
-/// Either message from receiver or state of the message queue
-#[derive(Debug)]
-enum GracefulMessage {
-    QueueEmptiness(bool),
-    Message(Option<String>),
-}
-
 /// Perform retranslating messages from queue and check timeout afterwards
 pub async fn process_client(
     queue: Queue,
@@ -118,17 +111,9 @@ pub async fn process_client(
     loop {
         let mut queue = Box::pin(queue.lock().fuse());
         let mut msg = peer.rx.next().fuse();
-        let message = select!(
+        select!(
             queue = queue => {
-                GracefulMessage::QueueEmptiness(queue.finished())
-            }
-            msg = msg => {
-                GracefulMessage::Message(msg)
-            }
-        );
-        match message {
-            GracefulMessage::QueueEmptiness(empty) => {
-                if empty {
+                if queue.finished() {
                     // make sure there is no other messages in receiver before closing socket
                     match timeout(Duration::from_millis(timeout_millis), peer.rx.next()).await {
                         Err(_) => {
@@ -141,11 +126,14 @@ pub async fn process_client(
                     }
                 }
             }
-            GracefulMessage::Message(Some(msg)) => {
-                peer.lines.send(msg).await?;
+            msg = msg => {
+                if let Some(msg) = msg {
+                    peer.lines.send(msg).await?;            
+                } else {
+                    break
+                }
             }
-            GracefulMessage::Message(None) => break,
-        }
+        );
     }
     Ok(())
 }

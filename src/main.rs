@@ -11,8 +11,8 @@ use carrier::misc::SequencedQueue;
 use carrier::server::ChatState;
 use carrier::{process_client, process_event_source};
 
-const TOTAL_EVENTS: u32 = 1_000;
-const CLIENT_RECEIVER_TIMEOUT: u64 = 10;
+const TOTAL_EVENTS: u32 = 1_000_0;
+const CLIENT_RECEIVER_TIMEOUT: u64 = 1;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -42,6 +42,7 @@ async fn main() -> Result<(), Error> {
     loop {
         let state = Arc::clone(&shared_state);
         let queue = Arc::clone(&sequenced_queue);
+        // log::info!("waiting clients");
         match clients_listner.accept().await {
             Ok((stream, _addr)) => {
                 tokio::spawn(async move {

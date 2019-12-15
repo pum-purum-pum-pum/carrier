@@ -40,8 +40,8 @@ impl Peer {
 /// Struct which contains information about connected users and allows to execute events on them
 #[derive(Debug, Default)]
 pub struct ChatState {
-    peers: HashMap<u32, Tx>,
-    users: HashMap<u32, User>,
+    pub peers: HashMap<u32, Tx>,
+    pub users: HashMap<u32, User>,
 }
 
 impl ChatState {
@@ -91,11 +91,6 @@ impl ChatState {
         self.users.get_mut(&user).map(|u| &mut u.blocked)
     }
 
-    // pub fn new_peer(&mut self, id: u32, tx: Tx) {
-    //     self.peers.insert(id, tx);
-    //     self.users.insert(id, User::default());
-    // }
-
     /// Actor should now be following Target. Target is expected to receive this event.
     pub fn follow(&mut self, from: u32, to: u32, message: &str) -> Result<(), Error> {
         if let Some(user) = self.users.get_mut(&to) {
@@ -103,7 +98,6 @@ impl ChatState {
                 user.followers.insert(from);
                 if let Some(target_peer) = self.peers.get(&to) {
                     target_peer.send(message.into())?;
-                    log::info!("follow {}", message);
                 }
             }
         };
@@ -142,7 +136,6 @@ impl ChatState {
         if let Some(user) = self.users.get(&to) {
             if user.is_not_blocked(from) {
                 if let Some(target_peer) = self.peers.get(&to) {
-                    log::info!("private {}", message);
                     target_peer.send(message.into())?;
                 }
             }
