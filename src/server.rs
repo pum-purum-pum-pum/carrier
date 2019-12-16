@@ -43,7 +43,7 @@ impl ServerState {
         Ok(Peer { id, lines, rx })
     }
 
-    /// send all events that occured before the user connected 
+    /// send all events that occured before the user connected
     pub fn send_await(&mut self, id: u32) -> Result<(), Error> {
         if let Some(user) = self.users.get_mut(&id) {
             while let Some(msg) = user.await_messages.pop_front() {

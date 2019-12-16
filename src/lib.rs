@@ -2,8 +2,8 @@
 System which acts as a socket listener that reads events from an _event source_ and forwards them to the relevant _user clients_.
 */
 
-use std::sync::Arc;
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use failure::{bail, Error};
 
@@ -25,6 +25,7 @@ use chat_app::event::Event;
 pub const TOTAL_EVENTS: u32 = 1_000_00;
 pub const CLIENT_RECEIVER_TIMEOUT_MILLIS: u64 = 10;
 pub const LOG_EVERY: u32 = TOTAL_EVENTS / 10;
+pub const ACCEPT_TIMEOUT: u64 = 5;
 
 /// A queue with a guarantee of the return of sequential elements.
 pub mod sequenced_queue;
@@ -76,7 +77,6 @@ pub async fn listen_events(
             bail!("Error during processing events queue {}", error);
         }
     }
-    log::info!("all events processed. close event listner");
     Ok(())
 }
 
@@ -97,7 +97,7 @@ pub async fn update_state(state: State, id: u32, event: Event) -> Result<(), Err
     let msg = format!("{}/{}", id, event);
     // if message is not possible to send we store it in state in order to send later
     // (it's not possible to do implicit because we are borrowing state)
-    let mut await_messages: VecDeque<(u32, String)> = VecDeque::new(); 
+    let mut await_messages: VecDeque<(u32, String)> = VecDeque::new();
     match event {
         // Actor should now be following Target. Target is expected to receive this event.
         Event::Follow { from, to } => {
@@ -141,11 +141,7 @@ pub async fn update_state(state: State, id: u32, event: Event) -> Result<(), Err
             }
         }
         // Target expects to receive this event.
-        Event::PrivateMessage {
-            from,
-            to,
-            ..
-        } => {
+        Event::PrivateMessage { from, to, .. } => {
             if let Some(user) = state.users.get(&to) {
                 if user.is_not_blocked(from) {
                     if let Some(target_peer) = state.peers.get(&to) {
