@@ -1,7 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use log::info;
-
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio_util::codec::{Framed, LinesCodec};
@@ -11,7 +9,6 @@ use futures::StreamExt;
 use failure::{bail, Error};
 
 use crate::user::User;
-use crate::State;
 
 pub type Tx = mpsc::UnboundedSender<String>;
 

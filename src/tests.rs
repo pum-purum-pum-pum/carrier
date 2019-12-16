@@ -1,13 +1,9 @@
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
-use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tokio::time::delay_for;
 use tokio_util::codec::{Framed, LinesCodec};
 
 use futures::StreamExt;
@@ -15,7 +11,7 @@ use futures::StreamExt;
 use chat_app::event::Event;
 
 use crate::sequenced_queue::SequencedQueue;
-use crate::server::{Peer, Rx, ServerState, Tx};
+use crate::server::{Peer, ServerState};
 use crate::{process_client, process_event_source, update_state, Queue, State};
 
 const TEST_ADDRESS: &str = "127.0.0.1:9938";

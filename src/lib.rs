@@ -79,6 +79,10 @@ pub async fn listen_events(
             }
         });
     }
+    // drain events from queue
+    while !incomming_events.lock().await.finished() {
+        process_and_forward(Arc::clone(&incomming_events), Arc::clone(&state)).await?;
+    }
     log::info!("all events processed. close event listner");
     Ok(())
 }
@@ -89,43 +93,9 @@ pub async fn process_event_source(
     incomming_events: Queue,
     stream: TcpStream,
 ) -> Result<(), Error> {
-    {
-        // do work with socket here
-        let mut last_timestamp = 0;
-        let mut current_id = 0;
-        let mut lines = Framed::new(stream, LinesCodec::new());
-        let user_num: u32 = if let Some(Ok(line)) = lines.next().await {
-            u32::from_str_radix(&line, 10)?
-        } else {
-            bail!("failed to parse number of users in event source message");
-        };
-        state.lock().await.generate_users(user_num);
-        while let Some(Ok(line)) = lines.next().await {
-            current_id += 1;
-            if current_id - last_timestamp >= LOG_EVERY {
-                last_timestamp = current_id;
-                log::info!("{} events processed", current_id);
-            }
-            let event = Event::parse(&line)?;
-            let sq = Arc::clone(&incomming_events);
-            tokio::spawn(async move {
-                sq.lock().await.insert(event.0, event.1);
-            });
-            // processing events asap
-            let sq = Arc::clone(&incomming_events);
-            let state = Arc::clone(&state);
-            tokio::spawn(async move {
-                if let Err(error) = process_and_forward(sq, state).await {
-                    log::error!("Error during processing events queue {}", error);
-                }
-            });
-        }
-    }
-    // drain events from queue
-    while !incomming_events.lock().await.finished() {
-        process_and_forward(Arc::clone(&incomming_events), Arc::clone(&state)).await?;
-    }
-    log::info!("event source connection closed");
+    let mut lines = Framed::new(stream, LinesCodec::new());
+    init_event_source(&mut lines, Arc::clone(&state)).await?;
+    listen_events(&mut lines, state, incomming_events).await?;
     Ok(())
 }
 
@@ -164,7 +134,7 @@ pub async fn update_state(state: State, id: u32, event: Event) -> Result<(), Err
             }
         }
         // All followers of Actor are expected to receive this event.
-        Event::StatusUpdate { from, message: _ } => {
+        Event::StatusUpdate { from, .. } => {
             if let Some(user) = state.users.get(&from) {
                 let recipients = &user.followers - &user.blocked;
                 for recipient in recipients.iter() {
@@ -180,7 +150,7 @@ pub async fn update_state(state: State, id: u32, event: Event) -> Result<(), Err
         Event::PrivateMessage {
             from,
             to,
-            message: _,
+            ..
         } => {
             if let Some(user) = state.users.get(&to) {
                 if user.is_not_blocked(from) {

@@ -7,15 +7,13 @@ use failure::Error;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio_util::codec::{Framed, LinesCodec};
-use tokio::time::{timeout, Duration};
 
 use carrier::sequenced_queue::SequencedQueue;
 use carrier::server::ServerState;
 use carrier::{init_event_source, listen_events, process_client};
 
-const TOTAL_EVENTS: u32 = 1_000_0;
+const TOTAL_EVENTS: u32 = 1_000_000;
 const CLIENT_RECEIVER_TIMEOUT_MILLIS: u64 = 1;
-const ACCEPT_CLIENT_TIMEOUT: u64 = 10;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -31,7 +29,7 @@ async fn main() -> Result<(), Error> {
     let (stream, _addr) = event_source_listener.accept().await?;
     log::info!("Event source connected");
     let mut event_source_stream = Framed::new(stream, LinesCodec::new());
-    let users_number = init_event_source(&mut event_source_stream, state).await?;
+    let _users_number = init_event_source(&mut event_source_stream, state).await?;
     
     // spawn task to process events from event source
     let queue = Arc::clone(&incomming_events);
@@ -42,7 +40,7 @@ async fn main() -> Result<(), Error> {
         }
     });
 
-    log::info!("waiting {} users to connect", users_number);
+    log::info!("waiting users to connect");
     let mut clients_listner = TcpListener::bind("127.0.0.1:9990").await?;
     // connect new clients
     loop {
