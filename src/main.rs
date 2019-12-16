@@ -1,3 +1,4 @@
+#![recursion_limit="1024"]
 use std::sync::Arc;
 
 use log::LevelFilter;
@@ -7,13 +8,15 @@ use failure::Error;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio_util::codec::{Framed, LinesCodec};
+use tokio::time::{timeout, Duration, delay_for};
+
+use futures::future::FutureExt;
+use futures::{select, StreamExt};
+use futures::future::join;
 
 use carrier::sequenced_queue::SequencedQueue;
 use carrier::server::ServerState;
-use carrier::{init_event_source, listen_events, process_client};
-
-const TOTAL_EVENTS: u32 = 1_000_000;
-const CLIENT_RECEIVER_TIMEOUT_MILLIS: u64 = 1;
+use carrier::{init_event_source, listen_events, process_client, TOTAL_EVENTS, CLIENT_RECEIVER_TIMEOUT_MILLIS};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -33,28 +36,35 @@ async fn main() -> Result<(), Error> {
     
     // spawn task to process events from event source
     let queue = Arc::clone(&incomming_events);
+
+    log::info!("waiting users to connect");
+    let mut clients_listner = TcpListener::bind("127.0.0.1:9990").await?;
     let state = Arc::clone(&shared_state);
     tokio::spawn(async move {
         if let Err(error) = listen_events(&mut event_source_stream, state, queue).await {
             log::error!("error while listen events: {}", error);
         }
     });
-
-    log::info!("waiting users to connect");
-    let mut clients_listner = TcpListener::bind("127.0.0.1:9990").await?;
+    let state = Arc::clone(&shared_state);
     // connect new clients
     loop {
-        let state = Arc::clone(&shared_state);
+        // log::info!("[[");
+        let s = Arc::clone(&state);
+        let q = Arc::clone(&incomming_events);
+        let state = Arc::clone(&state);
         let queue = Arc::clone(&incomming_events);
-        match clients_listner.accept().await {
+        let mut accept = Box::pin(clients_listner.accept()).fuse();
+        let mut state_select = Box::pin(s.lock()).fuse();
+        match accept.await {
             Ok((stream, _addr)) => {
+                // asynchronously process clients
                 tokio::spawn(async move {
                     let peer = state.lock().await.new_peer(stream).await;
                     match peer {
                         Ok(peer) => {
                             log::info!("connected new client with id {}", peer.id);
                             if let Err(error) =
-                                process_client(queue, peer, CLIENT_RECEIVER_TIMEOUT_MILLIS).await
+                                process_client(queue, peer, Arc::clone(&state), CLIENT_RECEIVER_TIMEOUT_MILLIS).await
                             {
                                 log::error!("Error during processing client: {}", error)
                             }
@@ -69,5 +79,17 @@ async fn main() -> Result<(), Error> {
                 log::error!("Failed to accept client connection: {}", error);
             }
         }
+        // select!(
+        //     accept = accept => {
+        //     }
+        //     state_select = state_select => {
+        //         // let (state, queue) = state_queue;
+        //         if state_select.peers.len() == 0 && q.lock().await.finished() {
+        //             break;
+        //         }
+        //     }
+        // );
+        // log::info!("]]");
     }
+    // Ok(())
 }

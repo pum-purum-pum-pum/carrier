@@ -103,10 +103,12 @@ async fn client() {
     let mut clients =
         generate_clients(users_num, Arc::clone(&chat_state), &mut clients_listner).await;
 
+    let state = Arc::clone(&chat_state);
     tokio::spawn(async move {
         for peer in clients.drain(..) {
             let queue = Arc::clone(&incomming_events);
-            process_client(queue, peer, 1).await.unwrap();
+            let state = Arc::clone(&state);
+            process_client(queue, peer, state, 1).await.unwrap();
         }
     });
     update_state(chat_state, 1, Event::Follow { from: 1, to: 2 })

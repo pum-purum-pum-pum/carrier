@@ -22,7 +22,9 @@ use server::{Peer, ServerState};
 // TODO dependecnies update.
 use chat_app::event::Event;
 
-const LOG_EVERY: u32 = 1000;
+pub const TOTAL_EVENTS: u32 = 1_000_00;
+pub const CLIENT_RECEIVER_TIMEOUT_MILLIS: u64 = 10;
+pub const LOG_EVERY: u32 = TOTAL_EVENTS / 10;
 
 /// A queue with a guarantee of the return of sequential elements.
 pub mod sequenced_queue;
@@ -66,22 +68,13 @@ pub async fn listen_events(
             log::info!("{} events processed", current_id);
         }
         let event = Event::parse(&line)?;
-        let sq = Arc::clone(&incomming_events);
-        tokio::spawn(async move {
-            sq.lock().await.insert(event.0, event.1);
-        });
+        incomming_events.lock().await.insert(event.0, event.1);
         // processing events asap
         let sq = Arc::clone(&incomming_events);
         let state = Arc::clone(&state);
-        tokio::spawn(async move {
-            if let Err(error) = process_and_forward(sq, state).await {
-                log::error!("Error during processing events queue {}", error);
-            }
-        });
-    }
-    // drain events from queue
-    while !incomming_events.lock().await.finished() {
-        process_and_forward(Arc::clone(&incomming_events), Arc::clone(&state)).await?;
+        if let Err(error) = process_and_forward(sq, state).await {
+            bail!("Error during processing events queue {}", error);
+        }
     }
     log::info!("all events processed. close event listner");
     Ok(())
@@ -126,7 +119,7 @@ pub async fn update_state(state: State, id: u32, event: Event) -> Result<(), Err
                 if user.is_not_blocked(from) {
                     user.followers.remove(&from);
                     if let Some(target_peer) = state.peers.get(&to) {
-                        target_peer.send(msg.clone())?
+                        target_peer.send(msg.clone())?;
                     } else {
                         await_messages.push_back((to, msg.clone()))
                     }
@@ -136,12 +129,13 @@ pub async fn update_state(state: State, id: u32, event: Event) -> Result<(), Err
         // All followers of Actor are expected to receive this event.
         Event::StatusUpdate { from, .. } => {
             if let Some(user) = state.users.get(&from) {
-                let recipients = &user.followers - &user.blocked;
-                for recipient in recipients.iter() {
-                    if let Some(peer) = state.peers.get(recipient) {
-                        peer.send(msg.clone())?;
-                    } else {
-                        await_messages.push_back((*recipient, msg.clone()));
+                for follower in user.followers.iter() {
+                    if state.is_not_blocked(from, *follower) {
+                        if let Some(peer) = state.peers.get(follower) {
+                            peer.send(msg.clone())?;
+                        } else {
+                            await_messages.push_back((*follower, msg.clone()));
+                        }
                     }
                 }
             }
@@ -179,10 +173,8 @@ pub async fn update_state(state: State, id: u32, event: Event) -> Result<(), Err
 }
 
 /// Check new messages in queue then apply events to state and forward events to connected clients if possible.
-/// Queue is locked until we drain all events from it
 pub async fn process_and_forward(incomming_events: Queue, state: State) -> Result<(), Error> {
-    let mut incomming_events = incomming_events.lock().await;
-    while let Some((id, item)) = incomming_events.next() {
+    while let Some((id, item)) = incomming_events.lock().await.next() {
         update_state(Arc::clone(&state), id, item).await?;
     }
     Ok(())
@@ -192,30 +184,32 @@ pub async fn process_and_forward(incomming_events: Queue, state: State) -> Resul
 pub async fn process_client(
     queue: Queue,
     mut peer: Peer,
+    state: State,
     timeout_millis: u64,
 ) -> Result<(), Error> {
     loop {
-        let mut queue = Box::pin(queue.lock().fuse());
+        let mut finished = Box::pin(queue.lock().map(|queue| queue.finished()).fuse());
         let mut msg = peer.rx.next().fuse();
         select!(
-            queue = queue => {
-                if queue.finished() {
+            finished = finished => {
+                if finished {
                     // make sure there is no other messages in receiver before closing socket
-                    match timeout(Duration::from_millis(timeout_millis), peer.rx.next()).await {
-                        Err(_) => {
-                            break;
-                        }
+                    match timeout(Duration::from_millis(timeout_millis), msg).await {
                         Ok(Some(msg)) => {
-                            log::info!("{} send: {}", peer.id, msg);
                             peer.lines.send(msg).await?;
                         }
-                        Ok(None) => (),
+                        Ok(None) => {
+                            break
+                        },
+                        Err(error) => {
+                            // deadline ha elapsed and rc is empty
+                            break;
+                        }
                     }
                 }
             }
             msg = msg => {
                 if let Some(msg) = msg {
-                    log::info!("{} send: {}", peer.id, msg);
                     peer.lines.send(msg).await?;
                 } else {
                     break
@@ -223,6 +217,7 @@ pub async fn process_client(
             }
         );
     }
+    state.lock().await.peers.remove(&peer.id);
     log::info!("Client with id={} connection closed", peer.id);
     Ok(())
 }

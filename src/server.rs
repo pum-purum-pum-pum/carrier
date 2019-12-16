@@ -48,7 +48,6 @@ impl ServerState {
         if let Some(user) = self.users.get_mut(&id) {
             while let Some(msg) = user.await_messages.pop_front() {
                 if let Some(target_peer) = self.peers.get(&id) {
-                    log::info!("-------------------------------------------- {}", msg);
                     target_peer.send(msg)?;
                 }
             }
