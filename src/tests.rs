@@ -15,8 +15,8 @@ use futures::StreamExt;
 use chat_app::event::Event;
 
 use crate::sequenced_queue::SequencedQueue;
-use crate::server::{ServerState, Peer, Rx, Tx};
-use crate::{process_client, process_event_source, Queue, State, update_state};
+use crate::server::{Peer, Rx, ServerState, Tx};
+use crate::{process_client, process_event_source, update_state, Queue, State};
 
 const TEST_ADDRESS: &str = "127.0.0.1:9938";
 const TEST_ADDRESS2: &str = "127.0.0.1:9939";
@@ -61,12 +61,16 @@ async fn follow() {
     });
     let mut clients =
         generate_clients(users_num, Arc::clone(&chat_state), &mut clients_listner).await;
-    update_state(Arc::clone(&chat_state), 1, Event::Follow{from: 1, to: 2}).await.unwrap();
-    update_state(Arc::clone(&chat_state), 2, Event::Follow{from: 2, to: 1}).await.unwrap();
+    update_state(Arc::clone(&chat_state), 1, Event::Follow { from: 1, to: 2 })
+        .await
+        .unwrap();
+    update_state(Arc::clone(&chat_state), 2, Event::Follow { from: 2, to: 1 })
+        .await
+        .unwrap();
     let b = clients[0].rx.next().await.unwrap();
     let a = clients[1].rx.next().await.unwrap();
-    assert_eq!(a, format!("1/{}", Event::Follow{from: 1, to: 2}));
-    assert_eq!(b, format!("2/{}", Event::Follow{from: 2, to: 1}));
+    assert_eq!(a, format!("1/{}", Event::Follow { from: 1, to: 2 }));
+    assert_eq!(b, format!("2/{}", Event::Follow { from: 2, to: 1 }));
     assert!(chat_state
         .lock()
         .await
@@ -109,7 +113,9 @@ async fn client() {
             process_client(queue, peer, 1).await.unwrap();
         }
     });
-    update_state(chat_state, 1, Event::Follow{from: 1, to: 2}).await.unwrap();
+    update_state(chat_state, 1, Event::Follow { from: 1, to: 2 })
+        .await
+        .unwrap();
     let mut lines = Framed::new(users.swap_remove(1), LinesCodec::new());
     assert_eq!(
         lines.next().await.unwrap().unwrap(),

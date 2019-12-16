@@ -19,22 +19,9 @@ pub type Rx = mpsc::UnboundedReceiver<String>;
 
 /// Client socket and messages receiver
 pub struct Peer {
+    pub id: u32,
     pub lines: Framed<TcpStream, LinesCodec>,
     pub rx: Rx,
-}
-
-impl Peer {
-    pub async fn new(state: State, stream: TcpStream) -> Result<Self, Error> {
-        let mut lines = Framed::new(stream, LinesCodec::new());
-        let id = if let Some(Ok(line)) = lines.next().await {
-            u32::from_str_radix(&line, 10)?
-        } else {
-            bail!("Client have not send it's id");
-        };
-        let (tx, rx) = mpsc::unbounded_channel();
-        state.lock().await.peers.insert(id, tx);
-        Ok(Self { lines, rx })
-    }
 }
 
 /// Users state and connections
@@ -45,7 +32,7 @@ pub struct ServerState {
 }
 
 impl ServerState {
-    /// create new peer
+    /// create new peer. Also send all awaiting messages to client peer
     pub async fn new_peer(&mut self, stream: TcpStream) -> Result<Peer, Error> {
         let (tx, rx) = mpsc::unbounded_channel();
         let mut lines = Framed::new(stream, LinesCodec::new());
@@ -54,9 +41,22 @@ impl ServerState {
         } else {
             bail!("Client have not send it's id");
         };
-        info!("peer {:?}", id);
         self.peers.insert(id, tx);
-        Ok(Peer { lines, rx })
+        self.send_await(id)?;
+        Ok(Peer { id, lines, rx })
+    }
+
+    /// send all events that occured before the user connected 
+    pub fn send_await(&mut self, id: u32) -> Result<(), Error> {
+        if let Some(user) = self.users.get_mut(&id) {
+            while let Some(msg) = user.await_messages.pop_front() {
+                if let Some(target_peer) = self.peers.get(&id) {
+                    log::info!("-------------------------------------------- {}", msg);
+                    target_peer.send(msg)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn generate_users(&mut self, users_num: u32) {

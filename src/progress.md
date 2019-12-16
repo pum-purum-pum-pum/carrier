@@ -25,10 +25,11 @@
 
 * timeout by 8-sized batches
 
+* why unfollow "expect" -- from description now one is expected to recieve
+* clients are expected to receive in order. Is it true for one client or for all clients?
 * assumption that solution is slower then test locally is not correct
 * unclear task about "silentry ignored"
 * mistake in `handle user updates` counter = 0 should be counter = 1 (no events have 0 id)
-* why unfollow "expect"
 * unfollow is wrong?????
     /// Target should be removed from Actor's followers. No one is expected to receive this event.
     pub fn unfollow(&mut self, from: u32, to: u32) {
@@ -36,7 +37,7 @@
 
                     // not that chat-app crate is using threads so:
                     // SERVER_SHUTDOWN_TIME = timeout * NUMBER_OF_CONNECTIONS / NUMBER_OF_THREADS
-
+* byteorder
 
 Assumptions about the task:
 	* private functions of the provided library should not be used
