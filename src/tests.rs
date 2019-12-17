@@ -13,7 +13,7 @@ use chat_app::event::Event;
 use crate::clients_processing::{process_event_source, update_state};
 use crate::sequenced_queue::SequencedQueue;
 use crate::server::{Peer, ServerState};
-use crate::{process_client, Queue, State};
+use crate::{forward_messages, Queue, State};
 
 const TEST_ADDRESS: &str = "127.0.0.1:9938";
 const TEST_ADDRESS2: &str = "127.0.0.1:9939";
@@ -109,7 +109,7 @@ async fn client() {
         for peer in clients.drain(..) {
             let queue = Arc::clone(&incomming_events);
             let state = Arc::clone(&state);
-            process_client(queue, peer, state, 1).await.unwrap();
+            forward_messages(queue, peer, state, 1).await.unwrap();
         }
     });
     update_state(chat_state, 1, Event::Follow { from: 1, to: 2 })
