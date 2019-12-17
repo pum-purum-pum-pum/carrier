@@ -7,19 +7,34 @@ use failure::Error;
 
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
-use tokio::time::{delay_for, timeout, Duration};
+use tokio::time::{timeout, Duration};
 use tokio_util::codec::{Framed, LinesCodec};
 
-use futures::future::join;
-use futures::future::FutureExt;
-use futures::{select, StreamExt};
+use crate::clients_processing::{init_event_source, listen_events, process_client};
+use crate::sequenced_queue::SequencedQueue;
+use crate::server::ServerState;
 
-use carrier::sequenced_queue::SequencedQueue;
-use carrier::server::ServerState;
-use carrier::{
-    init_event_source, listen_events, process_client, ACCEPT_TIMEOUT,
-    CLIENT_RECEIVER_TIMEOUT_MILLIS, TOTAL_EVENTS,
-};
+// TODO dependecnies update.
+pub use chat_app::event::Event;
+
+pub const TOTAL_EVENTS: u32 = 1_000_000;
+pub const CLIENT_RECEIVER_TIMEOUT_MILLIS: u64 = 10;
+pub const LOG_EVERY: u32 = TOTAL_EVENTS / 10;
+pub const ACCEPT_TIMEOUT: u64 = 5;
+
+pub mod clients_processing;
+/// A queue with a guarantee of the return of sequential elements.
+pub mod sequenced_queue;
+/// Users and functions to execute events on them
+pub mod server;
+#[cfg(test)]
+mod tests;
+pub mod user;
+
+/// Shared chat state
+pub type State = Arc<Mutex<ServerState>>;
+/// Shared sequenced queue with messages(events) from _event source_
+pub type Queue = Arc<Mutex<SequencedQueue<Event>>>;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -52,13 +67,9 @@ async fn main() -> Result<(), Error> {
     let state = Arc::clone(&shared_state);
     // connect new clients
     loop {
-        // log::info!("[[");
-        let s = Arc::clone(&state);
-        let q = Arc::clone(&incomming_events);
         let state = Arc::clone(&state);
         let queue = Arc::clone(&incomming_events);
-        let mut accept = Box::pin(clients_listner.accept()).fuse();
-        let mut state_select = Box::pin(s.lock()).fuse();
+        let accept = clients_listner.accept();
         match timeout(Duration::from_secs(ACCEPT_TIMEOUT), accept).await {
             Ok(Ok((stream, _addr))) => {
                 // asynchronously process clients
@@ -95,17 +106,5 @@ async fn main() -> Result<(), Error> {
                 );
             }
         }
-        // select!(
-        //     accept = accept => {
-        //     }
-        //     state_select = state_select => {
-        //         // let (state, queue) = state_queue;
-        //         if state_select.peers.len() == 0 && q.lock().await.finished() {
-        //             break;
-        //         }
-        //     }
-        // );
-        // log::info!("]]");
     }
-    // Ok(())
 }

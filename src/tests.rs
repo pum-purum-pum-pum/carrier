@@ -10,9 +10,10 @@ use futures::StreamExt;
 
 use chat_app::event::Event;
 
+use crate::clients_processing::{process_event_source, update_state};
 use crate::sequenced_queue::SequencedQueue;
 use crate::server::{Peer, ServerState};
-use crate::{process_client, process_event_source, update_state, Queue, State};
+use crate::{process_client, Queue, State};
 
 const TEST_ADDRESS: &str = "127.0.0.1:9938";
 const TEST_ADDRESS2: &str = "127.0.0.1:9939";
