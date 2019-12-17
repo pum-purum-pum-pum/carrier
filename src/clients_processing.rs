@@ -1,7 +1,3 @@
-/*!
-System which acts as a socket listener that reads events from an _event source_ and forwards them to the relevant _user clients_.
-*/
-
 use std::collections::VecDeque;
 use std::sync::Arc;
 

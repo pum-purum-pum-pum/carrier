@@ -24,6 +24,7 @@ pub const CLIENT_RECEIVER_TIMEOUT_MILLIS: u64 = 10;
 pub const LOG_EVERY: u32 = TOTAL_EVENTS / 10;
 pub const ACCEPT_TIMEOUT: u64 = 5;
 
+/// clients and event source processors
 pub mod clients_processing;
 /// A queue with a guarantee of the return of sequential elements.
 pub mod sequenced_queue;
