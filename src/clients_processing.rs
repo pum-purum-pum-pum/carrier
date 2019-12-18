@@ -12,7 +12,7 @@ use futures::{select, StreamExt};
 use futures_util::sink::SinkExt;
 
 use crate::server::Peer;
-use crate::{Event, Queue, State, CLIENT_RECEIVER_TIMEOUT_MILLIS, LOG_EVERY};
+use crate::{Event, Queue, State, CLIENT_RECEIVER_TIMEOUT_MILLIS, LOG_EVERY_MILLIS};
 
 /// Connect event source and accept(and return) number of users and initialize them in state
 pub async fn init_event_source(
@@ -36,7 +36,7 @@ pub async fn listen_events(
     let mut current_id = 0;
     while let Some(Ok(line)) = event_source.next().await {
         current_id += 1;
-        if current_id - last_timestamp >= LOG_EVERY {
+        if current_id - last_timestamp >= LOG_EVERY_MILLIS {
             last_timestamp = current_id;
             log::info!("{} events processed", current_id);
         }
@@ -147,6 +147,7 @@ pub async fn process_client(stream: TcpStream, state: State, incomming_events: Q
 }
 
 /// Perform retranslating messages from queue to client socket and check timeout afterwards
+#[allow(clippy::unnecessary_mut_passed)]
 pub async fn forward_messages(
     queue: Queue,
     mut peer: Peer,
@@ -156,7 +157,6 @@ pub async fn forward_messages(
     loop {
         let mut finished = Box::pin(queue.lock().map(|queue| queue.finished()).fuse());
         let mut msg = peer.rx.next().fuse();
-        #[deny(clippy::unnecessary_mut_passed)]
         select!(
             // no more events in queue
             finished = finished => {
@@ -178,8 +178,6 @@ pub async fn forward_messages(
             }
             msg = msg => {
                 if let Some(msg) = msg {
-                    // log::info!("sending");
-                    // let msg = format!("{}\n", msg);
                     peer.lines.send(msg).await?;
                 } else {
                     break

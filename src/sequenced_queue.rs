@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-/// Queue which returns only _sequenced events_
-/// If event is missing it will return None forever
+/// Queue which returns only sequenced events
+/// If event is missing next will return None forever
 #[derive(Debug)]
 pub struct SequencedQueue<T> {
     pub current: u32,
@@ -27,9 +27,13 @@ impl<T> SequencedQueue<T> {
     pub fn insert(&mut self, id: u32, value: T) {
         self.queue.insert(id, value);
     }
+}
+
+impl<T> Iterator for SequencedQueue<T> {
+    type Item = (u32, T);
 
     /// If there is next sequenced event then return it
-    pub fn next(&mut self) -> Option<(u32, T)> {
+    fn next(&mut self) -> Option<Self::Item> {
         if self.current > self.total_items {
             return None;
         }

@@ -22,9 +22,11 @@ pub struct Peer {
 }
 
 /// Users state and connections
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Users {
+    // mapping to associated user channel
     pub peers: HashMap<u32, Tx>,
+    // mapping to user's business logic data
     pub users: HashMap<u32, User>,
 }
 
@@ -36,7 +38,7 @@ impl Users {
         }
         Self {
             users,
-            ..Default::default()
+            peers: HashMap::new(),
         }
     }
 
