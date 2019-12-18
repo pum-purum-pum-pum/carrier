@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-// TODO timeout for missing events
-
 /// Queue which returns only _sequenced events_
 /// If event is missing it will return None forever
 #[derive(Debug)]

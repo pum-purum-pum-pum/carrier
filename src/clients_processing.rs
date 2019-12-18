@@ -21,7 +21,7 @@ pub async fn init_event_source(
     let user_num: u32 = if let Some(Ok(line)) = event_source.next().await {
         u32::from_str_radix(&line, 10)?
     } else {
-        bail!("failed to parse number of users in event source message");
+        bail!("failed to get number of users from event source");
     };
     Ok(user_num)
 }
@@ -43,16 +43,14 @@ pub async fn listen_events(
         let event = Event::parse(&line)?;
         incomming_events.lock().await.insert(event.0, event.1);
         // processing events asap
-        let sq = Arc::clone(&incomming_events);
-        let state = Arc::clone(&state);
-        if let Err(error) = process_and_forward(sq, state).await {
-            bail!("Error during processing events queue {}", error);
+        while let Some((id, item)) = incomming_events.lock().await.next() {
+            update_state(Arc::clone(&state), id, item).await?;
         }
     }
     Ok(())
 }
 
-/// Send messages from event source into queue and asynchronously process them
+/// Send messages from event source into queue and process them
 pub async fn process_event_source(
     state: State,
     incomming_events: Queue,
@@ -121,14 +119,6 @@ pub async fn update_state(state: State, id: u32, event: Event) -> Result<(), Err
         if let Some(user) = state.users.get_mut(&to) {
             user.await_messages.push_back(msg)
         }
-    }
-    Ok(())
-}
-
-/// Check new messages in queue then apply events to state and forward events to connected clients if possible.
-pub async fn process_and_forward(incomming_events: Queue, state: State) -> Result<(), Error> {
-    while let Some((id, item)) = incomming_events.lock().await.next() {
-        update_state(Arc::clone(&state), id, item).await?;
     }
     Ok(())
 }

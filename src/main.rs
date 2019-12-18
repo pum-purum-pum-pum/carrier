@@ -5,7 +5,7 @@ use log::LevelFilter;
 
 use failure::Error;
 
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio::time::{timeout, Duration};
 use tokio_util::codec::{Framed, LinesCodec};
@@ -14,15 +14,15 @@ use crate::clients_processing::{
     forward_messages, init_event_source, listen_events, process_client,
 };
 use crate::sequenced_queue::SequencedQueue;
-use crate::server::ServerState;
+use crate::server::Users;
 
-// TODO dependecnies update.
+// dependecnies update needed
 pub use chat_app::event::Event;
 
 pub const TOTAL_EVENTS: u32 = 1_000_00;
 pub const CLIENT_RECEIVER_TIMEOUT_MILLIS: u64 = 10;
 pub const LOG_EVERY: u32 = TOTAL_EVENTS / 10;
-pub const ACCEPT_TIMEOUT: u64 = 5;
+pub const ACCEPTING_LOG_INTERVAL: u64 = 5;
 
 /// clients and event source processors
 pub mod clients_processing;
@@ -35,7 +35,7 @@ mod tests;
 pub mod user;
 
 /// Shared chat state
-pub type State = Arc<Mutex<ServerState>>;
+pub type State = Arc<Mutex<Users>>;
 /// Shared sequenced queue with messages(events) from _event source_
 pub type Queue = Arc<Mutex<SequencedQueue<Event>>>;
 
@@ -51,7 +51,7 @@ async fn main() -> Result<(), Error> {
     log::info!("Event source connected");
     let mut event_source_stream = Framed::new(stream, LinesCodec::new());
     let users_number = init_event_source(&mut event_source_stream).await?;
-    let shared_state = Arc::new(Mutex::new(ServerState::new(users_number)));
+    let shared_state = Arc::new(Mutex::new(Users::new(users_number)));
 
     log::info!("waiting users to connect");
     let mut clients_listner = TcpListener::bind("127.0.0.1:9990").await?;
@@ -69,7 +69,9 @@ async fn main() -> Result<(), Error> {
         let state = Arc::clone(&shared_state);
         let queue = Arc::clone(&incomming_events);
         let accept = clients_listner.accept();
-        match timeout(Duration::from_secs(ACCEPT_TIMEOUT), accept).await {
+        // Timeout is a debugging hack.
+        // It will drop the accepting of a connection(even in progress) every 5 seconds and log the server state
+        match timeout(Duration::from_secs(ACCEPTING_LOG_INTERVAL), accept).await {
             Ok(Ok((stream, _addr))) => {
                 // asynchronously process clients
                 tokio::spawn(async move {
@@ -83,7 +85,7 @@ async fn main() -> Result<(), Error> {
             Err(_) => {
                 log::info!(
                     "waiting for new clients(this message will appear every {} sec)",
-                    ACCEPT_TIMEOUT
+                    ACCEPTING_LOG_INTERVAL
                 );
             }
         }

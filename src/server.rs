@@ -23,12 +23,12 @@ pub struct Peer {
 
 /// Users state and connections
 #[derive(Debug, Default)]
-pub struct ServerState {
+pub struct Users {
     pub peers: HashMap<u32, Tx>,
     pub users: HashMap<u32, User>,
 }
 
-impl ServerState {
+impl Users {
     pub fn new(num_users: u32) -> Self {
         let mut users = HashMap::new();
         for i in 1..=num_users {

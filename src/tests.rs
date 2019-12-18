@@ -12,7 +12,7 @@ use chat_app::event::Event;
 
 use crate::clients_processing::{process_event_source, update_state};
 use crate::sequenced_queue::SequencedQueue;
-use crate::server::{Peer, ServerState};
+use crate::server::{Peer, Users};
 use crate::{forward_messages, Queue, State};
 
 const TEST_ADDRESS: &str = "127.0.0.1:9938";
@@ -50,7 +50,7 @@ async fn generate_clients(
 async fn follow() {
     let users_num = 2;
     let mut clients_listner = TcpListener::bind(TEST_ADDRESS).await.unwrap();
-    let chat_state = Arc::new(Mutex::new(ServerState::default()));
+    let chat_state = Arc::new(Mutex::new(Users::default()));
     chat_state.lock().await.generate_users(users_num);
     let test_adress = TEST_ADDRESS.clone();
     tokio::spawn(async move {
@@ -94,7 +94,7 @@ fn test_queue() {
 async fn client() {
     let users_num = 2;
     let queue_size = 0; // queue is empty
-    let chat_state = Arc::new(Mutex::new(ServerState::default()));
+    let chat_state = Arc::new(Mutex::new(Users::default()));
     chat_state.lock().await.generate_users(users_num);
     let incomming_events: Queue = Arc::new(Mutex::new(SequencedQueue::new(queue_size)));
 
@@ -126,7 +126,7 @@ async fn client() {
 async fn event_source() {
     let queue_size = 1;
     let users_num = 2;
-    let chat_state = Arc::new(Mutex::new(ServerState::default()));
+    let chat_state = Arc::new(Mutex::new(Users::default()));
     chat_state.lock().await.generate_users(users_num);
     let incomming_events: Queue = Arc::new(Mutex::new(SequencedQueue::new(queue_size)));
 
