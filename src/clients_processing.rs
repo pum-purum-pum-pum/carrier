@@ -11,8 +11,10 @@ use futures::future::FutureExt;
 use futures::{select, StreamExt};
 use futures_util::sink::SinkExt;
 
-use crate::server::Peer;
-use crate::{Event, Queue, State, CLIENT_RECEIVER_TIMEOUT_MILLIS, LOG_EVERY_MILLIS};
+use crate::server::{Peer, Users};
+use crate::{
+    Event, SequencedQueueShared, UsersShared, CLIENT_RECEIVER_TIMEOUT_MILLIS, LOG_EVERY_MILLIS,
+};
 
 /// Connect event source and accept(and return) number of users and initialize them in state
 pub async fn init_event_source(
@@ -29,8 +31,8 @@ pub async fn init_event_source(
 /// Send messages from event source into queue and asynchronously process them
 pub async fn listen_events(
     event_source: &mut Framed<TcpStream, LinesCodec>,
-    state: State,
-    incomming_events: Queue,
+    users: UsersShared,
+    incomming_events: SequencedQueueShared,
 ) -> Result<(), Error> {
     let mut last_timestamp = 0;
     let mut current_id = 0;
@@ -44,7 +46,7 @@ pub async fn listen_events(
         incomming_events.lock().await.insert(event.0, event.1);
         // processing events asap
         while let Some((id, item)) = incomming_events.lock().await.next() {
-            update_state(Arc::clone(&state), id, item).await?;
+            update_users(&mut *users.lock().await, id, item).await?;
         }
     }
     Ok(())
@@ -52,8 +54,8 @@ pub async fn listen_events(
 
 /// Send messages from event source into queue and process them
 pub async fn process_event_source(
-    state: State,
-    incomming_events: Queue,
+    state: UsersShared,
+    incomming_events: SequencedQueueShared,
     stream: TcpStream,
 ) -> Result<(), Error> {
     let mut lines = Framed::new(stream, LinesCodec::new());
@@ -63,8 +65,7 @@ pub async fn process_event_source(
 }
 
 /// Lock state and update it by applying event
-pub async fn update_state(state: State, id: u32, event: Event) -> Result<(), Error> {
-    let mut state = state.lock().await;
+pub async fn update_users(state: &mut Users, id: u32, event: Event) -> Result<(), Error> {
     let msg = format!("{}/{}", id, event);
     // if message is not possible to send we store it in state in order to send later
     // (it's not possible to do implicit because we are borrowing state)
@@ -85,7 +86,6 @@ pub async fn update_state(state: State, id: u32, event: Event) -> Result<(), Err
             if let Some(user) = state.users.get_mut(&to) {
                 if user.is_not_blocked(from) {
                     user.followers.remove(&from);
-                    state.send_or_keep(to, msg.clone(), &mut await_messages)?;
                 }
             }
         }
@@ -124,7 +124,11 @@ pub async fn update_state(state: State, id: u32, event: Event) -> Result<(), Err
 }
 
 /// connect new client and forward events into it
-pub async fn process_client(stream: TcpStream, state: State, incomming_events: Queue) {
+pub async fn process_client(
+    stream: TcpStream,
+    state: UsersShared,
+    incomming_events: SequencedQueueShared,
+) {
     let peer = state.lock().await.new_peer(stream).await;
     match peer {
         Ok(peer) => {
@@ -149,9 +153,9 @@ pub async fn process_client(stream: TcpStream, state: State, incomming_events: Q
 /// Perform retranslating messages from queue to client socket and check timeout afterwards
 #[allow(clippy::unnecessary_mut_passed)]
 pub async fn forward_messages(
-    queue: Queue,
+    queue: SequencedQueueShared,
     mut peer: Peer,
-    state: State,
+    state: UsersShared,
     timeout_millis: u64,
 ) -> Result<(), Error> {
     loop {

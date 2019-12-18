@@ -35,9 +35,9 @@ mod tests;
 pub mod user;
 
 /// Shared chat state
-pub type State = Arc<Mutex<Users>>;
+pub type UsersShared = Arc<Mutex<Users>>;
 /// Shared sequenced queue with messages(events) from _event source_
-pub type Queue = Arc<Mutex<SequencedQueue<Event>>>;
+pub type SequencedQueueShared = Arc<Mutex<SequencedQueue<Event>>>;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
